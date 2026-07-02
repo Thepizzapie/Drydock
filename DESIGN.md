@@ -32,7 +32,7 @@ OSS core (Apache-2.0); Pro tier later (signed installer, container fleets, compl
 | D7 | Agents = markdown files with YAML frontmatter; anything not declared is denied; frontmatter compiles to aegis rules | OpenCode's best idea, enforced by our kernel |
 | D8 | Providers: Anthropic first + one OpenAI-compatible client (covers Ollama/local) | No provider matrix in v1 |
 | D9 | orbit's MCP tool surface preserved (renamed) + new run/ask tools | Claude Code can use Drydock as its PM even without the runtime |
-| D10 | UI: Next.js static export shipped inside the wheel, served by FastAPI. No Node for users | Design spec = the merged Runey/Fernand artifact |
+| D10 | UI: hand-crafted static app (vanilla ES modules + CSS tokens, no framework, no build step) shipped in the wheel at `drydock/_data/ui/`, served by FastAPI. No Node for users OR for the build | Matches the owner's taste (hand-crafted over generated framework code) and makes local-first trivially true — zero network, zero toolchain. Supersedes the earlier Next.js sketch |
 | D11 | IDs: ULID strings. Naming: "Decisions" = project decisions; policy allow/deny = "Approvals & Audit" | Sortable IDs; no vocabulary collision |
 | D12 | Single server, localhost bind, default port 4400 | Local-first identity |
 | D13 | External coding agents (Claude Code, Codex, Cursor, …) are first-class: they consume Drydock via MCP, are governed via aegis hooks into the same audit/ask tables, and can BE the execution engine for a run via the Runner protocol | Devs keep the agents they already use; Drydock supplies workspace + policy + PM |
@@ -320,7 +320,7 @@ best-effort; audit rows come from the hook layer, so governance never depends on
 | **0 — Foundation** | Scaffold, pyproject, schema.sql, db.py, store port (service/fts/memory/tickets/planning/registry/allocator), config, CLI skeleton, store tests | `drydock init` + MCP resume/search/tickets work against SQLite | ~1.5 wk |
 | **1 — Runtime** | providers, session loop, tools, toolbus, kernel(aegis), tier0 + worktrees, runs/run_events, budget, **Runner protocol + shell runner** (`drydock workspace open`) | `drydock run refactor-bot --ticket TCK-1` completes a real ticket headless, fully audited, ask pauses work in CLI | ~1 wk |
 | **2 — Server + approvals** ✅ | FastAPI, SSE, asks flow, audit/stats routes, MCP additions, **`drydock hooks install` (aegis→drydock sink) + claude runner** | Dispatch + approve-ask + watch live; a Claude Code run inside a Drydock workspace shows up in the same audit/ask queue | done |
-| **3 — UI** | Static export pipeline, pages 1–5 + wizard per artifact spec | `uvx drydock-ai` → `drydock up` → full flow in browser | ~1 wk |
+| **3 — UI** ✅ | Hand-crafted static app (no framework/Node), 8 views (Overview, Approvals, Runs+live viewer, Work, Memory, Agents, Studio, Audit, Settings), dispatch modal, real logo | `drydock up` → full flow in browser, verified | done |
 | **4 — Tier 1 + release** | WSL worker, distro setup, egress rules, docs, README, PyPI publish | v0.1.0 on PyPI, demo GIF, tier 1 verified on this machine | ~1 wk |
 
 Post-v0.1: Tier 2 Docker, Agent Studio editing UI, skills flywheel, teams/Pro, desktop installer.

@@ -45,7 +45,7 @@ def api_overview(project: str):
     ready = [t for t in tickets if t["status"] == "ready"]
     runs = runs_store.list_runs(project, limit=20)
     running = [r for r in runs if r["status"] == "running"]
-    asks = runs_store.list_asks(status="pending", project=project)
+    asks = _asks_with_detail(runs_store.list_asks(status="pending", project=project))
     audit = runs_store.list_audit(project=project, limit=25)
     decided = runs_store.list_audit(project=project, limit=500)
     outcomes = {"allow": 0, "deny": 0, "ask": 0}
@@ -161,17 +161,33 @@ async def api_dispatch(project: str, body: dict):
         provider_override=body.get("provider"), instruction=body.get("instruction"))
 
 
+# ── agents ──
+@app.get("/api/projects/{project}/agents")
+def api_agents(project: str):
+    return registry.list_agents(project)
+
+
+@app.get("/api/projects/{project}/agents/{name}")
+def api_agent(project: str, name: str):
+    a = registry.get_agent(project, name)
+    if not a:
+        raise HTTPException(404, "agent not found")
+    return a
+
+
 # ── approvals ──
-@app.get("/api/asks")
-def api_asks(project: str | None = None):
-    asks = runs_store.list_asks(status="pending", project=project)
-    # enrich with the audit row (tool, command, rule)
+def _asks_with_detail(asks: list) -> list:
     out = []
     for a in asks:
         aud = runs_store.list_audit(run_id=a["run_id"], limit=50)
         match = next((x for x in aud if x["id"] == a["audit_id"]), None)
         out.append({**a, "detail": match})
     return out
+
+
+@app.get("/api/asks")
+def api_asks(project: str | None = None):
+    return _asks_with_detail(runs_store.list_asks(status="pending", project=project))
 
 
 @app.post("/api/asks/{ask_id}/resolve")
@@ -207,6 +223,28 @@ def api_tokens(project: str):
 def api_tiers():
     from ..sandbox import detect
     return detect.tiers()
+
+
+@app.get("/api/system/doctor")
+def api_doctor():
+    from .. import config
+    from ..sandbox import detect
+    from ..store import embeddings
+    vectors = True
+    try:
+        import chromadb  # noqa: F401
+    except ImportError:
+        vectors = False
+    return {
+        "home": str(config.home()),
+        "db": str(config.db_path()),
+        "git": detect.git_available(),
+        "wsl": detect.wsl_available(),
+        "docker": detect.docker_available(),
+        "embeddings": embeddings.backend(),
+        "vectors": vectors,
+        "recommended_tier": detect.recommended_tier(),
+    }
 
 
 @app.get("/api/health")
