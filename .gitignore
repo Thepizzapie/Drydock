@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+.pytest_cache/
+.coverage
+*.db
+*.db-wal
+*.db-shm
+.drydock/
+ui/node_modules/
+ui/.next/
+ui/out/

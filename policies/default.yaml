@@ -1,0 +1,25 @@
+# Drydock shipped default policy (aegis-shaped).
+# Copied into .drydock/policy.yaml by `drydock init`.
+default_action: allow
+on_error: allow
+
+egress:
+  default: deny
+  allow: []
+
+rules:
+  - name: block-secret-files
+    priority: 150
+    action: deny
+    actions: [read, edit, write]
+    argument_patterns:
+      file_path: "*.env*"
+    message: "Reading/writing .env files is blocked"
+
+  - name: confirm-destructive
+    priority: 120
+    action: ask
+    actions: [shell]
+    regex:
+      command: "rm\\s+-rf|del\\s+/s|git\\s+push\\s+--force|DROP\\s+TABLE"
+    message: "Destructive command — needs approval"
