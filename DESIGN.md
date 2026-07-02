@@ -319,7 +319,7 @@ best-effort; audit rows come from the hook layer, so governance never depends on
 |---|---|---|---|
 | **0 — Foundation** | Scaffold, pyproject, schema.sql, db.py, store port (service/fts/memory/tickets/planning/registry/allocator), config, CLI skeleton, store tests | `drydock init` + MCP resume/search/tickets work against SQLite | ~1.5 wk |
 | **1 — Runtime** | providers, session loop, tools, toolbus, kernel(aegis), tier0 + worktrees, runs/run_events, budget, **Runner protocol + shell runner** (`drydock workspace open`) | `drydock run refactor-bot --ticket TCK-1` completes a real ticket headless, fully audited, ask pauses work in CLI | ~1 wk |
-| **2 — Server + approvals** | FastAPI, SSE, asks flow, audit/stats routes, MCP additions, **`drydock hooks install` (aegis→drydock sink) + claude/codex runners** | Dispatch + approve-ask + watch live; a Claude Code run inside a Drydock workspace shows up in the same audit/ask queue | ~1 wk |
+| **2 — Server + approvals** ✅ | FastAPI, SSE, asks flow, audit/stats routes, MCP additions, **`drydock hooks install` (aegis→drydock sink) + claude runner** | Dispatch + approve-ask + watch live; a Claude Code run inside a Drydock workspace shows up in the same audit/ask queue | done |
 | **3 — UI** | Static export pipeline, pages 1–5 + wizard per artifact spec | `uvx drydock-ai` → `drydock up` → full flow in browser | ~1 wk |
 | **4 — Tier 1 + release** | WSL worker, distro setup, egress rules, docs, README, PyPI publish | v0.1.0 on PyPI, demo GIF, tier 1 verified on this machine | ~1 wk |
 

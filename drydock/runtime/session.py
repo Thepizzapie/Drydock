@@ -24,7 +24,8 @@ from .tools import schemas_for
 
 
 class Session:
-    def __init__(self, project, run, agentdef, provider, workspace, worker, identity=None):
+    def __init__(self, project, run, agentdef, provider, workspace, worker,
+                 identity=None, ask_resolver=None):
         self.project = project
         self.run = run
         self.run_id = run["id"]
@@ -33,7 +34,9 @@ class Session:
         self.workspace = workspace
         self.kernel = Kernel(project, agentdef, workspace_root=workspace.root,
                              identity=identity)
-        self.bus = toolbus_mod.ToolBus(self.run_id, self.kernel, worker, identity=identity)
+        self.bus = toolbus_mod.ToolBus(self.run_id, self.kernel, worker,
+                                       identity=identity, ask_resolver=ask_resolver,
+                                       project=project)
         self.budget = Budget(agentdef.budget)
         self.tools = schemas_for(agentdef.tools)
         self.messages: list = []

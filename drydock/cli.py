@@ -174,10 +174,15 @@ def cmd_run(args) -> int:
     if not project:
         print("no project — run `drydock init` here first, or pass --project")
         return 1
-    out = runner.start_run(
-        project, args.agent, ticket=args.ticket, tier=args.tier,
-        provider_override=args.provider, instruction=args.instruction,
-        runner=args.runner)
+    if args.runner == "claude":
+        from .runtime.runners_external import run_claude
+        out = run_claude(project, ticket=args.ticket, tier=args.tier,
+                         instruction=args.instruction)
+    else:
+        out = runner.start_run(
+            project, args.agent, ticket=args.ticket, tier=args.tier,
+            provider_override=args.provider, instruction=args.instruction,
+            runner=args.runner)
     print(json.dumps(out, indent=2))
     return 0 if out.get("status") in ("done", "workspace_ready", "waiting") else 2
 
@@ -203,6 +208,39 @@ def cmd_agent(args) -> int:
         print(json.dumps(a, indent=2) if a else "not found")
         return 0 if a else 1
     return 1
+
+
+def cmd_up(args) -> int:
+    import webbrowser
+    from .server.app import serve
+    url = f"http://{args.host}:{args.port}"
+    print(f"drydock server: {url}")
+    if not args.no_browser:
+        try:
+            webbrowser.open(url)
+        except Exception:
+            pass
+    serve(host=args.host, port=args.port)
+    return 0
+
+
+def cmd_hooks(args) -> int:
+    from .runtime.hooks import install
+    project = args.project or _project_for_cwd()
+    root = _git_root(Path.cwd()) or Path.cwd()
+    if not project:
+        print("no project — run `drydock init` here first")
+        return 1
+    out = install(str(root), project)
+    print(f"installed capture hooks in {out['settings']}")
+    print(f"events: {', '.join(out['events'])}")
+    print("external Claude Code sessions in this repo now report into Drydock.")
+    return 0
+
+
+def cmd_hookcapture(args) -> int:
+    from .runtime.hooks import capture
+    return capture(args.project, args.event)
 
 
 def cmd_workspace(args) -> int:
@@ -244,7 +282,7 @@ def main(argv: list[str] | None = None) -> int:
     p_run.add_argument("--ticket", help="ticket key (e.g. TCK-12)")
     p_run.add_argument("--tier", type=int, default=0, choices=[0, 1, 2])
     p_run.add_argument("--provider", help="override provider (mock|anthropic|openai)")
-    p_run.add_argument("--runner", default="native", choices=["native", "shell"])
+    p_run.add_argument("--runner", default="native", choices=["native", "shell", "claude"])
     p_run.add_argument("--instruction", help="one-off instruction instead of a ticket brief")
     p_run.set_defaults(fn=cmd_run)
 
@@ -260,6 +298,22 @@ def main(argv: list[str] | None = None) -> int:
     p_ws.add_argument("--agent")
     p_ws.add_argument("--tier", type=int, default=0, choices=[0, 1, 2])
     p_ws.set_defaults(fn=cmd_workspace)
+
+    p_up = sub.add_parser("up", help="start the Drydock server + dashboard")
+    p_up.add_argument("--host", default="127.0.0.1")
+    p_up.add_argument("--port", type=int, default=4400)
+    p_up.add_argument("--no-browser", action="store_true")
+    p_up.set_defaults(fn=cmd_up)
+
+    p_hooks = sub.add_parser("hooks", help="install capture hooks so external agents report into Drydock")
+    p_hooks.add_argument("action", choices=["install"])
+    p_hooks.add_argument("--project")
+    p_hooks.set_defaults(fn=cmd_hooks)
+
+    p_hc = sub.add_parser("hookcapture", help="(internal) receive an external agent hook payload")
+    p_hc.add_argument("event")
+    p_hc.add_argument("--project", required=True)
+    p_hc.set_defaults(fn=cmd_hookcapture)
 
     args = parser.parse_args(argv)
     if not getattr(args, "fn", None):

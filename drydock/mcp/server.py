@@ -294,6 +294,56 @@ def file_context(project: str, path: str):
     return graph.file_context(project, path)
 
 
+# ── runtime (D13: let an external orchestrator drive sandboxed runs) ─────────
+
+@mcp.tool()
+def dispatch_agent(project: str, agent: str, ticket: str | None = None,
+                   tier: int = 0, instruction: str | None = None):
+    """Run an agent on a ticket in a sandbox. Returns the run summary; if a tool
+    call needs approval the run parks as 'waiting' with an ask_id (resolve_ask)."""
+    from ..runtime import runner
+    return runner.start_run(project, agent, ticket=ticket, tier=tier,
+                            instruction=instruction)
+
+
+@mcp.tool()
+def get_run(run_id: str):
+    """Get a run with its event transcript."""
+    from ..store import runs as runs_store
+    r = runs_store.get_run(run_id)
+    if not r:
+        return None
+    return {"run": r, "events": runs_store.get_events(run_id)}
+
+
+@mcp.tool()
+def list_asks(project: str | None = None):
+    """Pending approvals (human-in-the-loop) across runs."""
+    from ..store import runs as runs_store
+    return runs_store.list_asks(status="pending", project=project)
+
+
+@mcp.tool()
+def resolve_ask(ask_id: str, resolution: str):
+    """Resolve a pending ask: approved_once | always | denied."""
+    from ..store import runs as runs_store
+    return runs_store.resolve_ask(ask_id, resolution, resolved_by="mcp")
+
+
+@mcp.tool()
+def workspace_diff(run_id: str):
+    """The working-tree diff for a run's sandbox workspace."""
+    from ..sandbox import worktree
+    from ..store import runs as runs_store
+    r = runs_store.get_run(run_id)
+    if not r or not r.get("workspace_id"):
+        return {"diff": ""}
+    ws = runs_store.get_workspace(r["workspace_id"])
+    if not ws or ws["kind"] != "worktree":
+        return {"diff": ""}
+    return {"diff": worktree.diff(ws["path"], ws["base_commit"])}
+
+
 def run() -> None:
     mcp.run()
 

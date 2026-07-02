@@ -55,7 +55,7 @@ def _load_agentdef(project, agent_ref):
 
 
 def start_run(project, agent_ref, ticket=None, tier=0, provider_override=None,
-              instruction=None, runner="native") -> dict:
+              instruction=None, runner="native", ask_resolver=None) -> dict:
     ad = _load_agentdef(project, agent_ref)
 
     ticket_row = tickets_mod.get_ticket(project, ticket) if ticket else None
@@ -88,7 +88,8 @@ def start_run(project, agent_ref, ticket=None, tier=0, provider_override=None,
     provider = _provider_for(ad, tier, override=provider_override)
     identity = f"{ad.name}@{run['id'][-6:]}"
 
-    session = Session(project, run, ad, provider, ws, worker, identity=identity)
+    session = Session(project, run, ad, provider, ws, worker, identity=identity,
+                      ask_resolver=ask_resolver)
     try:
         return session.run_loop(instruction=instruction)
     finally:
