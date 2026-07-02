@@ -1,7 +1,7 @@
 // Settings — local config + environment. Also the first-run reference:
 // everything runs on this machine, nothing leaves. Keep it clean and reassuring.
 import { api } from "../api.js";
-import { el, card, pill, empty, skeleton, ICONS } from "../ui.js";
+import { el, card, pill, btn, empty, skeleton, clear, copyBtn, toast, projectModal, ICONS } from "../ui.js";
 
 export async function settingsView(root, { state }) {
   root.append(el("div", { class: "page-h" }, [
@@ -27,8 +27,47 @@ export async function settingsView(root, { state }) {
   root.append(stack);
 
   stack.append(tierSection(doc, tiers));
+  stack.append(localModelsSection());
   stack.append(envSection(doc));
+  stack.append(mcpSection());
+  stack.append(integrationsSection(state));
   stack.append(projectsSection(state));
+}
+
+// ---- Local models -----------------------------------------------------------
+
+function localModelsSection() {
+  const body = el("div", {});
+  body.append(skeleton(2));
+  const wrap = card({ title: "Local models", meta: "run agents on your own hardware", body: [body] });
+
+  api.models().then((cat) => {
+    clear(body);
+    const local = cat.local || { available: false, models: [], endpoint: "" };
+    body.append(el("p", {
+      class: "muted", style: "margin:0 0 14px;line-height:1.55;font-size:12.5px",
+      text: "Point an agent at a local model and it runs offline and free — same sandbox, same policy, same tools. Drydock speaks the OpenAI-compatible API (Ollama, LM Studio, vLLM, …).",
+    }));
+    body.append(el("div", { class: "kv-list", style: "grid-template-columns:1fr" }, [
+      el("div", { class: "kv" }, [el("span", { text: "Endpoint" }), el("span", { class: "mono", text: local.endpoint || "—" })]),
+      el("div", { class: "kv" }, [el("span", { text: "Status" }),
+        local.available ? pill("connected", "ok") : pill("not detected", "mute")]),
+    ]));
+    if (local.available && local.models.length) {
+      body.append(el("div", { style: "display:flex;flex-wrap:wrap;gap:6px;margin-top:12px" },
+        local.models.map((m) => pill(m.label, "info"))));
+    } else {
+      body.append(el("div", { class: "muted", style: "font-size:11.5px;margin-top:10px",
+        text: "No local server found. Start Ollama (ollama serve) or set DRYDOCK_OPENAI_BASE to your server, then reload." }));
+    }
+    if ((cat.cloud || []).length) {
+      body.append(el("div", { style: "font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);margin:16px 0 8px", text: "Cloud models" }));
+      body.append(el("div", { style: "display:flex;flex-wrap:wrap;gap:6px" },
+        cat.cloud.map((m) => pill(m.label, "mute"))));
+    }
+  }).catch((e) => { clear(body); body.append(empty({ title: "Couldn't detect models", text: e.message })); });
+
+  return wrap;
 }
 
 // ---- Isolation tier ---------------------------------------------------------
@@ -109,27 +148,129 @@ function valNode(v) {
   return el("span", { text: String(v) });
 }
 
+// ---- MCP ----------------------------------------------------------------------
+
+function mcpSection() {
+  const body = el("div", {});
+  body.append(skeleton(3));
+  const wrap = card({ title: "MCP", meta: "plug your agent client into Drydock", body: [body] });
+
+  api.mcpInfo().then((info) => {
+    clear(body);
+    body.append(el("p", {
+      class: "muted", style: "margin:0 0 14px;line-height:1.55;font-size:12.5px",
+      text: "Any MCP client — Claude Code, Codex, Cursor — gets Drydock's full PM plane and can dispatch sandboxed runs.",
+    }));
+    body.append(cmdRow("Claude Code", info.command));
+    body.append(cmdRow("Codex", info.codex));
+    if (info.note) {
+      body.append(el("div", { class: "muted", style: "font-size:11.5px;margin-top:2px;line-height:1.5", text: info.note }));
+    }
+  }).catch((e) => {
+    clear(body);
+    body.append(empty({ title: "Couldn't load MCP setup", text: e.message }));
+  });
+
+  return wrap;
+}
+
+function cmdRow(label, command) {
+  return el("div", { style: "margin-bottom:14px" }, [
+    el("div", { class: "row-between", style: "margin-bottom:6px" }, [
+      el("span", { class: "muted", style: "font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase", text: label }),
+      copyBtn(command || ""),
+    ]),
+    el("div", { class: "code" }, [el("pre", { text: command || "—" })]),
+  ]);
+}
+
+// ---- Integrations -------------------------------------------------------------
+
+function integrationsSection(state) {
+  const result = el("div", {});
+
+  const go = btn("Install hooks into this repo", { kind: "primary", onClick: async () => {
+    go.disabled = true;
+    const prev = go.textContent;
+    go.textContent = "Installing…";
+    try {
+      const out = await api.installHooks(state.project);
+      toast("Hooks installed", "ok");
+      clear(result);
+      result.append(el("div", { style: "margin-top:14px" }, [
+        el("div", { class: "kv-list", style: "grid-template-columns:1fr" }, [
+          el("div", { class: "kv" }, [
+            el("span", { text: "Settings written" }),
+            el("span", { class: "mono", text: out.settings || "—" }),
+          ]),
+        ]),
+        el("div", { style: "display:flex;flex-wrap:wrap;gap:6px;margin-top:10px" },
+          (out.events || []).map((ev) => pill(ev, "navy"))),
+      ]));
+    } catch (e) {
+      toast(e.message, "err");
+    } finally {
+      go.disabled = !state.project;
+      go.textContent = prev;
+    }
+  } });
+
+  const kids = [
+    el("p", {
+      class: "muted", style: "margin:0 0 14px;line-height:1.55;font-size:12.5px",
+      text: "Route external agent sessions in this repo into Drydock's audit trail and approvals.",
+    }),
+    el("div", {}, [go]),
+  ];
+  if (!state.project) {
+    go.disabled = true;
+    kids.push(el("div", { class: "muted", style: "font-size:11.5px;margin-top:8px", text: "Register a project first — hooks install into its repo." }));
+  }
+  kids.push(result);
+
+  return card({
+    title: "Integrations",
+    meta: "hooks for external agents",
+    body: kids,
+  });
+}
+
 // ---- Projects ---------------------------------------------------------------
 
 function projectsSection(state) {
   const projects = (state && state.projects) || [];
   const body = el("div", { class: "bd flush" });
-  const wrap = card({ title: "Projects", meta: projects.length ? `${projects.length} registered` : "none yet", body: [body], flush: true });
+  const wrap = card({
+    title: "Projects",
+    meta: projects.length ? `${projects.length} registered` : "none yet",
+    link: { text: "+ New project" },
+    onLink: () => projectModal(state, { onCreated: () => location.reload() }),
+    body: [body], flush: true,
+  });
 
   if (!projects.length) {
     body.append(empty({
       title: "No projects registered",
-      text: "Run  drydock init  in a git repo and it registers here.",
+      text: "Run  drydock init  in a git repo — or register one here with New project.",
       icon: ICONS.ship,
     }));
     return wrap;
   }
 
-  const tbl = el("table", { class: "tbl" }, [el("tbody", {},
-    projects.map((p) => el("tr", {}, [
-      el("td", { class: "mono", text: p.slug, style: "width:220px" }),
+  const tbl = el("table", { class: "tbl" }, [
+    el("thead", {}, [el("tr", {}, [
+      el("th", { text: "Slug" }),
+      el("th", { text: "Name" }),
+      el("th", { text: "Repo path" }),
+      el("th", { text: "Prefix" }),
+    ])]),
+    el("tbody", {}, projects.map((p) => el("tr", {}, [
+      el("td", { class: "mono", text: p.slug, style: "width:160px" }),
       el("td", { text: p.name || p.slug }),
-    ])))]);
+      el("td", { class: "mono muted", style: "font-size:12px", text: p.root_path || "—" }),
+      el("td", { class: "mono", style: "width:70px", text: p.ticket_prefix || "—" }),
+    ]))),
+  ]);
   body.append(tbl);
   return wrap;
 }

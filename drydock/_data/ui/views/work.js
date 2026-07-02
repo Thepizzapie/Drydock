@@ -1,7 +1,7 @@
 // Work — the ticket board. Scoped briefs an agent can pick up, and the detail
 // view where a ticket becomes a dispatch. PM is first-class here, not a side effect.
 import { api } from "../api.js";
-import { el, card, pill, btn, empty, skeleton, relTime, ICONS, modal, dispatchModal } from "../ui.js";
+import { el, card, stat, pill, btn, empty, skeleton, relTime, ICONS, modal, toast, dispatchModal } from "../ui.js";
 import { navigate } from "../router.js";
 
 const FILTERS = [
@@ -31,9 +31,13 @@ export async function workView(root, { state }) {
       el("div", { class: "sub", text: "Tickets and pickup-ready briefs." }),
     ]),
     el("div", { class: "actions" }, [
-      btn("New ticket", { kind: "ghost", icon: iconSpan(ICONS.plus), onClick: newTicketModal }),
+      btn("New ticket", { kind: "ghost", icon: iconSpan(ICONS.plus), onClick: () => newTicketModal(state, { onCreated }) }),
     ]),
   ]));
+
+  // KPI strip — counts across every status, regardless of the filter below
+  const kpiHost = el("div", { class: "grid g-4", style: "margin-bottom:16px" });
+  root.append(kpiHost);
 
   // segmented status filter
   const seg = el("div", { class: "seg", style: "margin-bottom:16px" });
@@ -53,6 +57,19 @@ export async function workView(root, { state }) {
     load();
   }
 
+  async function loadKpis() {
+    try {
+      const all = await api.tickets(state.project);
+      const n = (s) => all.filter((t) => t.status === s).length;
+      kpiHost.replaceChildren(
+        stat({ label: "Open", value: n("open") }),
+        stat({ label: "Ready", value: n("ready"), cap: "dispatch-ready" }),
+        stat({ label: "In progress", value: n("in_progress") }),
+        stat({ label: "Done", value: n("done") }),
+      );
+    } catch (_) { kpiHost.replaceChildren(); }
+  }
+
   async function load() {
     bodyHost.replaceChildren(skeleton(5));
     let tickets;
@@ -66,6 +83,14 @@ export async function workView(root, { state }) {
     bodyHost.replaceChildren(ticketTable(tickets));
   }
 
+  function onCreated(out) {
+    loadKpis();
+    load();
+    const key = out && out.ticket && out.ticket.key;
+    if (key) navigate(`#/ticket/${key}`);
+  }
+
+  loadKpis();
   await load();
 }
 
@@ -88,8 +113,8 @@ function ticketTable(tickets) {
 
 function emptyForFilter(key) {
   const msgs = {
-    null: { title: "No tickets yet", text: "Add a plan to your repo and a ticket appears here, ready to pick up." },
-    ready: { title: "Nothing ready for pickup", text: "A ticket becomes ready once it has a scoped, dispatch-ready brief." },
+    null: { title: "No tickets yet", text: "Create one above — add plan steps and it arrives scoped, ready for an agent." },
+    ready: { title: "Nothing ready for pickup", text: "A ticket becomes ready once every step has scoped files." },
     in_progress: { title: "No tickets in progress", text: "Dispatch an agent to a ready ticket and it moves here." },
     done: { title: "Nothing done yet", text: "Finished tickets land here once an agent wraps them up." },
   };
@@ -97,21 +122,73 @@ function emptyForFilter(key) {
   return empty({ title: m.title, text: m.text, icon: ICONS.ticket });
 }
 
-// Tickets aren't created through the API yet — be honest about it instead of
-// faking a create that won't stick. They come in via the CLI / MCP.
-function newTicketModal() {
-  modal({
+// New ticket — title, priority, optional description, and an optional plan:
+// step rows with scoped files. With steps, the server builds the full plan
+// (ticket + pinned plan memory + scoped tasks) so the ticket lands dispatch-ready.
+function newTicketModal(state, { onCreated } = {}) {
+  const titleIn = el("input", { class: "input", placeholder: "e.g. Add rate limiting to the API" });
+  const prioSel = el("select", { class: "input" }, [0, 1, 2, 3].map((p) =>
+    el("option", { value: String(p), text: ["P0 · critical", "P1 · high", "P2 · normal", "P3 · low"][p],
+      selected: p === 2 ? "selected" : null })));
+  const descIn = el("textarea", { class: "textarea", placeholder: "optional — what and why, in plain words" });
+
+  const field = (label, control, hint) => el("label", { style: "display:block;margin-bottom:14px" }, [
+    el("div", { style: "font-size:12px;font-weight:600;color:var(--ink-2);margin-bottom:5px", text: label }),
+    control,
+    hint && el("div", { class: "muted", style: "font-size:11.5px;margin-top:4px", text: hint }),
+  ]);
+
+  // plan steps — dynamic rows, each a step title + comma-separated scoped files
+  const stepRows = new Set();
+  const stepsHost = el("div", { class: "stack", style: "gap:8px" });
+  function addStepRow() {
+    const stepTitle = el("input", { class: "input", placeholder: `Step ${stepRows.size + 1} — e.g. Add the middleware` });
+    const stepFiles = el("input", { class: "input mono", style: "font-size:12px",
+      placeholder: "scoped files — src/api.js, src/limits.js" });
+    const entry = { stepTitle, stepFiles, row: null };
+    const rm = btn("×", { kind: "ghost", sm: true, onClick: () => { stepRows.delete(entry); entry.row.remove(); } });
+    rm.setAttribute("aria-label", "Remove step");
+    entry.row = el("div", { style: "display:grid;grid-template-columns:1fr 1.2fr auto;gap:8px;align-items:center" },
+      [stepTitle, stepFiles, rm]);
+    stepRows.add(entry);
+    stepsHost.append(entry.row);
+  }
+
+  const stepsSection = el("div", { style: "margin-bottom:14px" }, [
+    el("div", { style: "font-size:12px;font-weight:600;color:var(--ink-2);margin-bottom:5px", text: "Plan steps" }),
+    el("div", { class: "muted", style: "font-size:11.5px;margin-bottom:8px",
+      text: "Each step becomes a scoped task an agent can pick up. Leave empty for a simple ticket." }),
+    stepsHost,
+    el("div", { style: "margin-top:8px" }, [btn("+ Add step", { kind: "ghost", sm: true, onClick: addStepRow })]),
+  ]);
+
+  const go = btn("Create ticket", { kind: "primary", onClick: async () => {
+    const title = titleIn.value.trim();
+    if (!title) { toast("Give the ticket a title", "err"); return; }
+    const steps = [...stepRows]
+      .map((r) => ({ title: r.stepTitle.value.trim(),
+        files: r.stepFiles.value.split(",").map((s) => s.trim()).filter(Boolean) }))
+      .filter((s) => s.title);
+    go.disabled = true; go.textContent = "Creating…";
+    try {
+      const out = await api.createTicket(state.project, {
+        title, body: descIn.value.trim(), priority: Number(prioSel.value), steps });
+      m.close();
+      const key = out && out.ticket && out.ticket.key;
+      toast(steps.length ? `Created ${key || "ticket"} with a ${steps.length}-step plan` : `Created ${key || "ticket"}`, "ok");
+      if (onCreated) onCreated(out);
+    } catch (e) { toast(e.message, "err"); go.disabled = false; go.textContent = "Create ticket"; }
+  } });
+
+  const m = modal({
     title: "New ticket",
     body: [
-      el("p", { class: "muted", style: "margin:0 0 12px;line-height:1.55",
-        text: "Tickets are created from your repo, not this dashboard yet. Use the drydock CLI or MCP to add one — it shows up here once it lands." }),
-      el("div", { class: "code", style: "border-radius:10px" }, [
-        el("pre", { text: "drydock ticket new" }),
-      ]),
-      el("p", { class: "muted", style: "margin:12px 0 0;font-size:12px",
-        text: "Prefer the agent path? Ask your MCP client to create a ticket for this project." }),
+      field("Title", titleIn),
+      field("Priority", prioSel),
+      field("Description", descIn),
+      stepsSection,
     ],
-    actions: [btn("Got it", { kind: "primary", onClick: () => document.querySelector(".scrim")?.remove() })],
+    actions: [btn("Cancel", { kind: "ghost", onClick: () => m.close() }), go],
   });
 }
 
@@ -141,7 +218,7 @@ export async function ticketView(root, { rest, state }) {
     return;
   }
 
-  const { ticket, work_items } = data;
+  const { ticket, work_items, scopes, readiness } = data;
   if (!ticket) {
     host.replaceChildren(el("div", { class: "card" }, [el("div", { class: "bd" }, [
       empty({ title: "Ticket not found", text: `No ticket ${key} in this project.`, icon: ICONS.ticket }),
@@ -151,13 +228,14 @@ export async function ticketView(root, { rest, state }) {
 
   host.replaceChildren();
 
-  // header row: title + status + priority
+  // header row: title + status + readiness + priority
   host.append(card({
     title: ticket.title || ticket.key,
     body: [
       el("div", { class: "row-between", style: "align-items:flex-start" }, [
         el("div", { style: "display:flex;align-items:center;gap:10px" }, [
           statusPill(ticket.status),
+          readinessPill(readiness),
           el("span", { html: `<span class="prio p${ticket.priority}">P${ticket.priority}</span>` }),
           el("span", { class: "mono muted", style: "font-size:12px", text: ticket.key }),
         ]),
@@ -168,17 +246,15 @@ export async function ticketView(root, { rest, state }) {
     ],
   }));
 
-  // work items
+  // work items — each step with its file scope and a fetchable task brief
   const items = work_items || [];
+  const scopeMap = scopes || {};
   const wiBody = el("div", { class: "bd flush" });
   if (!items.length) {
     wiBody.append(empty({ title: "No work items", text: "This ticket hasn't been broken into steps yet." }));
   } else {
     wiBody.append(el("table", { class: "tbl" }, [el("tbody", {}, items.map((w) =>
-      el("tr", {}, [
-        el("td", { text: w.title || w.name || "—" }),
-        el("td", { class: "r", style: "width:112px" }, [statusPill(w.status)]),
-      ])))]));
+      workItemRow(w, scopeMap[w.id] || [], state)))]));
   }
   host.append(el("div", { style: "margin-top:16px" }, [card({
     title: "Work items", meta: items.length ? `${items.length} step${items.length === 1 ? "" : "s"}` : "none yet",
@@ -191,6 +267,41 @@ export async function ticketView(root, { rest, state }) {
       btn("Dispatch agent", { kind: "primary", onClick: () => dispatchModal(state, { ticket: ticket.key, navigate }) }),
     ]));
   }
+}
+
+// readiness = { ready, has_plan, tasks_total, tasks_scoped }
+function readinessPill(r) {
+  if (!r) return null;
+  if (r.ready) return pill("Dispatch-ready", "ok");
+  if (!r.has_plan && (r.tasks_total || 0) === 0) return pill("No plan yet", "mute");
+  return pill(`Needs scoping ${r.tasks_scoped || 0}/${r.tasks_total || 0}`, "mute");
+}
+
+function workItemRow(w, files, state) {
+  const briefBtn = btn("Brief", { kind: "ghost", sm: true, onClick: async () => {
+    briefBtn.disabled = true; briefBtn.textContent = "Loading…";
+    try {
+      const b = await api.brief(state.project, w.id);
+      modal({
+        title: w.title || w.name || "Task brief",
+        body: [el("div", { class: "code", style: "border-radius:10px" }, [
+          el("pre", { text: (b && b.rendered) || "No brief available for this task yet." }),
+        ])],
+      });
+    } catch (e) { toast(e.message, "err"); }
+    briefBtn.disabled = false; briefBtn.textContent = "Brief";
+  } });
+
+  return el("tr", {}, [
+    el("td", {}, [
+      el("div", { text: w.title || w.name || "—" }),
+      el("div", { class: "mono muted",
+        style: "font-size:11px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:460px",
+        text: files.length ? files.join(" · ") : "unscoped" }),
+    ]),
+    el("td", { style: "width:112px" }, [statusPill(w.status)]),
+    el("td", { class: "r", style: "width:86px" }, [briefBtn]),
+  ]);
 }
 
 function isDispatchReady(t) {

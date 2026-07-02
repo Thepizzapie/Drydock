@@ -135,6 +135,172 @@ export function clickable(node, onActivate) {
   return node;
 }
 
+// Copy-to-clipboard button for command snippets.
+export function copyBtn(text) {
+  return btn("Copy", { kind: "ghost", sm: true, onClick: async (e) => {
+    try { await navigator.clipboard.writeText(text); toast("Copied", "ok"); }
+    catch { toast("Couldn't copy — select it manually", "err"); }
+  } });
+}
+
+// Shared new-project flow (topbar + settings). Registers a repo path as a project.
+export async function projectModal(state, { onCreated } = {}) {
+  const { api } = await import("./api.js");
+  const nameInput = el("input", { class: "input", placeholder: "e.g. Shipping Platform" });
+  const pathInput = el("input", { class: "input", placeholder: "e.g. D:\\shipping-platform (repo root)" });
+  const prefixInput = el("input", { class: "input", placeholder: "auto — e.g. SP", maxlength: "6" });
+
+  const field = (label, control, hint) => el("label", { style: "display:block;margin-bottom:14px" }, [
+    el("div", { style: "font-size:12px;font-weight:600;color:var(--ink-2);margin-bottom:5px", text: label }),
+    control,
+    hint && el("div", { class: "muted", style: "font-size:11.5px;margin-top:4px", text: hint }),
+  ]);
+
+  const go = btn("Register project", { kind: "primary", onClick: async () => {
+    const name = nameInput.value.trim();
+    if (!name) { toast("Give the project a name", "err"); return; }
+    go.disabled = true; go.textContent = "Registering…";
+    try {
+      const p = await api.createProject({ name, root_path: pathInput.value.trim() || null,
+                                          ticket_prefix: prefixInput.value.trim() || null });
+      m.close();
+      toast(`Registered ${p.slug}`, "ok");
+      if (onCreated) onCreated(p);
+    } catch (e) { toast(e.message, "err"); go.disabled = false; go.textContent = "Register project"; }
+  } });
+
+  const m = modal({
+    title: "New project",
+    body: [
+      el("p", { class: "muted", style: "margin:0 0 16px;line-height:1.5",
+        text: "Point Drydock at a repo. Tickets, memory, runs, and audit all scope to it." }),
+      field("Name", nameInput),
+      field("Repo path", pathInput, "Optional — without it you get PM only (no sandboxes or code view)."),
+      field("Ticket prefix", prefixInput, "Keys look like SP-1, SP-2. Left blank, it's derived from the name."),
+    ],
+    actions: [btn("Cancel", { kind: "ghost", onClick: () => m.close() }), go],
+  });
+}
+
+// Agent builder — author an agent in-app: model (cloud OR local), tools it may
+// use, and the permission rules that gate them. This is the "create your own
+// local agent" surface. `existing` prefills for editing. Writes a real .md file.
+export async function agentAuthorModal(state, { existing, onSaved } = {}) {
+  const { api } = await import("./api.js");
+  const [catalog, toolList] = await Promise.all([
+    api.models().catch(() => ({ cloud: [], local: { available: false, models: [] } })),
+    api.tools().catch(() => []),
+  ]);
+  const def = (existing && existing.definition) || {};
+  const perms = def.permissions || { default: "deny", rules: [] };
+
+  const nameIn = el("input", { class: "input", value: existing ? existing.name : "",
+    placeholder: "e.g. test-writer", disabled: existing ? "disabled" : null });
+  const descIn = el("input", { class: "input", value: existing ? (existing.description || "") : "",
+    placeholder: "one line — what this agent is for" });
+
+  // model select: cloud group + detected local group
+  const modelSel = el("select", { class: "input" });
+  const cur = existing ? existing.model : null;
+  for (const m of catalog.cloud || [])
+    modelSel.append(el("option", { value: m.id, text: `${m.label}  ·  cloud`, selected: m.id === cur ? "selected" : null }));
+  const locals = (catalog.local && catalog.local.models) || [];
+  for (const m of locals)
+    modelSel.append(el("option", { value: m.id, text: `${m.label}  ·  local · free`, selected: m.id === cur ? "selected" : null }));
+  const localNote = catalog.local && catalog.local.available
+    ? el("div", { class: "muted", style: "font-size:11.5px;margin-top:4px",
+        text: `${locals.length} local model${locals.length === 1 ? "" : "s"} detected at ${catalog.local.endpoint} — runs free and offline.` })
+    : el("div", { class: "muted", style: "font-size:11.5px;margin-top:4px",
+        text: "No local model server detected. Start Ollama (or any OpenAI-compatible server) to run agents on your own hardware." });
+
+  const promptIn = el("textarea", { class: "textarea", style: "min-height:90px",
+    text: existing ? (def.__body || "") : "" ,
+    placeholder: "System prompt — how this agent should work, what to prefer, what to avoid." });
+
+  // tools: checkboxes
+  const curTools = new Set(existing ? (existing.tools || []) : ["read_file", "edit_file", "grep", "glob", "task_done"]);
+  const toolBoxes = toolList.map((t) => {
+    const cb = el("input", { type: "checkbox", checked: curTools.has(t.name) ? "checked" : null });
+    cb._tool = t.name;
+    return el("label", { style: "display:flex;gap:8px;align-items:flex-start;font-size:12.5px;padding:5px 0" },
+      [cb, el("div", {}, [el("span", { class: "mono", style: "font-weight:600", text: t.name }),
+        el("div", { class: "muted", style: "font-size:11.5px", text: t.description })])]);
+  });
+
+  // permission rules
+  const ruleRows = [];
+  const rulesHost = el("div", { class: "stack", style: "gap:6px" });
+  const toolOpts = ["read_file", "write_file", "edit_file", "bash", "glob", "grep", "git_status", "git_diff", "network"];
+  function addRule(r = {}) {
+    const act = el("select", { class: "input mono", style: "font-size:12px" },
+      toolOpts.map((t) => el("option", { value: t, text: t, selected: (r.action === t) ? "selected" : null })));
+    const scope = el("input", { class: "input mono", style: "font-size:12px", value: r.scope || r.match || "",
+      placeholder: "scope e.g. src/** — or a command match" });
+    const dec = el("select", { class: "input", style: "font-size:12px" },
+      ["allow", "ask", "deny"].map((d) => el("option", { value: d, text: d, selected: (r.decision === d) ? "selected" : null })));
+    const entry = { act, scope, dec, row: null };
+    const rm = btn("×", { kind: "ghost", sm: true, onClick: () => { const i = ruleRows.indexOf(entry); if (i > -1) ruleRows.splice(i, 1); entry.row.remove(); } });
+    entry.row = el("div", { style: "display:grid;grid-template-columns:1.1fr 1.6fr .9fr auto;gap:6px;align-items:center" }, [act, scope, dec, rm]);
+    ruleRows.push(entry);
+    rulesHost.append(entry.row);
+  }
+  (perms.rules || []).forEach(addRule);
+  if (!(perms.rules || []).length) { addRule({ action: "read_file", scope: "**", decision: "allow" }); addRule({ action: "bash", scope: "*", decision: "ask" }); }
+
+  const defaultSel = el("select", { class: "input", style: "width:auto" },
+    ["deny", "ask", "allow"].map((d) => el("option", { value: d, text: `default: ${d}`, selected: (perms.default || "deny") === d ? "selected" : null })));
+
+  const field = (label, control, hint) => el("label", { style: "display:block;margin-bottom:14px" }, [
+    el("div", { style: "font-size:12px;font-weight:600;color:var(--ink-2);margin-bottom:5px", text: label }),
+    control, hint,
+  ]);
+  const section = (label) => el("div", { style: "font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);margin:6px 0 8px", text: label });
+
+  const go = btn(existing ? "Save agent" : "Create agent", { kind: "primary", onClick: async () => {
+    const name = nameIn.value.trim();
+    if (!name) { toast("Give the agent a name", "err"); return; }
+    const tools = toolBoxes.map((l) => l.querySelector("input")).filter((c) => c.checked).map((c) => c._tool);
+    if (!tools.includes("task_done")) tools.push("task_done");
+    const rules = ruleRows.map((e) => {
+      const scope = e.scope.value.trim();
+      const r = { action: e.act.value, decision: e.dec.value };
+      if (scope) { if (e.act.value === "bash") r.match = scope; else r.scope = scope; }
+      return r;
+    });
+    go.disabled = true; go.textContent = "Saving…";
+    try {
+      const row = await api.authorAgent(state.project, {
+        name, description: descIn.value.trim(), model: modelSel.value,
+        tools, system_prompt: promptIn.value,
+        permissions: { default: defaultSel.value, rules },
+      });
+      m.close();
+      toast(existing ? "Agent saved" : `Created ${row.name}`, "ok");
+      if (onSaved) onSaved(row);
+    } catch (e) { toast(e.message, "err"); go.disabled = false; go.textContent = existing ? "Save agent" : "Create agent"; }
+  } });
+
+  const m = modal({
+    title: existing ? `Edit ${existing.name}` : "New agent",
+    body: [
+      el("p", { class: "muted", style: "margin:0 0 16px;line-height:1.5",
+        text: "Agents run in a sandbox with only the tools and permissions you grant. Pick a cloud or local model — Drydock routes either." }),
+      field("Name", nameIn),
+      field("Description", descIn),
+      field("Model", modelSel, localNote),
+      field("System prompt", promptIn),
+      section("Tools it may use"),
+      el("div", { style: "columns:2;column-gap:20px;margin-bottom:14px" }, toolBoxes),
+      el("div", { class: "row-between", style: "margin-bottom:8px" }, [section("Permissions"), defaultSel]),
+      el("div", { class: "muted", style: "font-size:11.5px;margin-bottom:8px",
+        text: "Rules match top-down. A file rule uses a path scope (src/**); a bash rule matches the command (npm test*)." }),
+      rulesHost,
+      el("div", { style: "margin-top:8px" }, [btn("+ Add rule", { kind: "ghost", sm: true, onClick: () => addRule() })]),
+    ],
+    actions: [btn("Cancel", { kind: "ghost", onClick: () => m.close() }), go],
+  });
+}
+
 // Shared dispatch flow — pick an agent (+ optional ticket + tier), start a run,
 // jump to its live transcript. Wired from every "Dispatch agent" affordance so
 // the core loop (ticket → dispatch → watch → approve → review) actually closes.

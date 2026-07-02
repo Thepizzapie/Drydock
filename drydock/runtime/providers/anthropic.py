@@ -3,14 +3,9 @@ from __future__ import annotations
 
 import os
 
+from .. import pricing
 from .base import Provider, ToolCall, Turn
 
-# rough per-model cents/1k tokens (in, out) for cost display; updated as needed
-_PRICES = {
-    "claude-sonnet-5": (0.30, 1.50),
-    "claude-opus-4-8": (1.50, 7.50),
-    "claude-haiku-4-5-20251001": (0.10, 0.50),
-}
 _DEFAULT_MODEL = "claude-sonnet-5"
 
 
@@ -50,5 +45,4 @@ class AnthropicProvider(Provider):
         )
 
     def cost_cents(self, tokens_in, tokens_out) -> int:
-        pin, pout = _PRICES.get(self.model, (0.30, 1.50))
-        return round((tokens_in / 1000 * pin + tokens_out / 1000 * pout))
+        return pricing.cost_cents(self.model, tokens_in, tokens_out)

@@ -2,7 +2,7 @@
 // Approvals is the product's differentiator: one focal ask you decide on, now.
 // Audit is the permanent local record of every decision your agents made.
 import { api } from "../api.js";
-import { el, card, pill, badge, btn, empty, skeleton, relTime, clockTime, ICONS, toast } from "../ui.js";
+import { el, card, pill, badge, btn, empty, skeleton, relTime, clockTime, ICONS, toast, clickable } from "../ui.js";
 import { navigate } from "../router.js";
 
 // ============================================================================
@@ -151,6 +151,12 @@ const TABS = [
   { key: "ask", label: "Asks", decision: "ask" },
 ];
 
+const SOURCES = [
+  { value: "", label: "All sources" },
+  { value: "native", label: "Native runs" },
+  { value: "external", label: "External sessions" },
+];
+
 export async function auditView(root, { state }) {
   if (!state.project) { root.append(noProject()); return; }
 
@@ -162,13 +168,25 @@ export async function auditView(root, { state }) {
   ]));
 
   let active = "all";
+  let facetsLoaded = false;
+
   const seg = el("div", { class: "seg" }, TABS.map((t) =>
     el("button", {
       class: t.key === active ? "on" : "",
       text: t.label,
       onclick: () => select(t.key),
     })));
-  root.append(el("div", { style: "margin-bottom:14px" }, [seg]));
+
+  const selStyle = "width:auto;min-width:132px";
+  const agentSel = el("select", { class: "input", style: selStyle, "aria-label": "Filter by agent", onchange: () => load() },
+    [el("option", { value: "", text: "All agents" })]);
+  const toolSel = el("select", { class: "input", style: selStyle, "aria-label": "Filter by tool", onchange: () => load() },
+    [el("option", { value: "", text: "All tools" })]);
+  const sourceSel = el("select", { class: "input", style: selStyle, "aria-label": "Filter by source", onchange: () => load() },
+    SOURCES.map((s) => el("option", { value: s.value, text: s.label })));
+
+  root.append(el("div", { style: "display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px" },
+    [seg, agentSel, toolSel, sourceSel]));
 
   const host = el("div", {});
   root.append(host);
@@ -180,13 +198,28 @@ export async function auditView(root, { state }) {
     load();
   }
 
+  function currentFilters() {
+    const tab = TABS.find((t) => t.key === active);
+    return { decision: tab.decision, agent: agentSel.value, tool: toolSel.value, source: sourceSel.value };
+  }
+  const isFiltered = (f) => Boolean(f.decision || f.agent || f.tool || f.source);
+
+  // Fill the agent/tool selects once, from the first unfiltered result set.
+  function populateFacets(rows) {
+    facetsLoaded = true;
+    const agents = [...new Set(rows.map((r) => rawAgent(r.identity)).filter(Boolean))].sort();
+    const tools = [...new Set(rows.map((r) => r.tool).filter(Boolean))].sort();
+    agents.forEach((a) => agentSel.append(el("option", { value: a, text: agentLabel(a) })));
+    tools.forEach((t) => toolSel.append(el("option", { value: t, text: t })));
+  }
+
   async function load() {
     clear(host);
     host.append(el("div", { class: "card" }, [skeleton(6)]));
 
-    const tab = TABS.find((t) => t.key === active);
+    const filters = currentFilters();
     let rows;
-    try { rows = await api.audit(state.project, tab.decision); }
+    try { rows = await api.audit(state.project, filters); }
     catch (e) {
       clear(host);
       host.append(el("div", { class: "card" }, [el("div", { class: "bd" }, [
@@ -195,21 +228,26 @@ export async function auditView(root, { state }) {
       return;
     }
 
+    if (!facetsLoaded && !isFiltered(filters)) populateFacets(rows);
+
     clear(host);
     if (!rows.length) {
       host.append(el("div", { class: "card" }, [el("div", { class: "bd" }, [
         empty({
-          title: active === "all" ? "No decisions yet" : `No ${tab.label.toLowerCase()} decisions`,
-          text: active === "all"
-            ? "Dispatch an agent and every action it takes is recorded here."
-            : "Nothing matched this filter. Switch tabs to see the rest.",
+          title: isFiltered(filters) ? "No matching decisions" : "No decisions yet",
+          text: isFiltered(filters)
+            ? "Nothing matched these filters. Loosen one and the rest comes back."
+            : "Dispatch an agent and every action it takes is recorded here.",
           icon: ICONS.audit,
         }),
       ])]));
       return;
     }
 
-    host.append(card({ meta: `${rows.length} ${rows.length === 1 ? "event" : "events"}`, body: [auditTable(rows)], flush: true }));
+    host.append(card({
+      meta: `${rows.length} ${rows.length === 1 ? "event" : "events"} · click a row for detail`,
+      body: [auditTable(rows)], flush: true,
+    }));
   }
 
   load();
@@ -224,20 +262,53 @@ function auditTable(rows) {
     el("th", { text: "Rule" }),
     el("th", { text: "Decision", class: "r" }),
   ])]);
-  const tb = el("tbody", {}, rows.map((r) => el("tr", {}, [
-    el("td", { class: "mono", text: clockTime(r.ts) }),
-    el("td", { class: "mono", text: agentLabel(r.identity) }),
-    el("td", { text: r.action || "—" }),
-    el("td", { class: "mono", text: resourceLabel(r) }),
-    el("td", { class: "muted", text: r.decision !== "allow" ? (r.rule || "—") : "" }),
-    el("td", { class: "r" }, [r.decision ? badge(r.decision) : el("span", { class: "muted", text: "—" })]),
-  ])));
+  const tb = el("tbody", {});
+  rows.forEach((r) => {
+    const detail = detailRow(r);
+    const tr = el("tr", { style: "cursor:pointer", "aria-expanded": "false" }, [
+      el("td", { class: "mono", text: clockTime(r.ts) }),
+      el("td", { class: "mono" }, [
+        agentLabel(r.identity),
+        r.ext_session_id && el("span", { style: "margin-left:6px" }, [pill("external", "info")]),
+      ]),
+      el("td", { text: r.action || "—" }),
+      el("td", { class: "mono", text: resourceLabel(r) }),
+      el("td", { class: "muted", text: r.decision !== "allow" ? (r.rule || "—") : "" }),
+      el("td", { class: "r" }, [r.decision ? badge(r.decision) : el("span", { class: "muted", text: "—" })]),
+    ]);
+    clickable(tr, () => {
+      detail.hidden = !detail.hidden;
+      tr.setAttribute("aria-expanded", detail.hidden ? "false" : "true");
+    });
+    tb.append(tr, detail);
+  });
   return el("table", { class: "tbl" }, [head, tb]);
+}
+
+// The expanded record beneath a row — full args, rule + message, identity, run link.
+function detailRow(r) {
+  const args = safeParse(r.args_json);
+  const facts = [];
+  if (r.rule) facts.push(["Rule", r.rule]);
+  if (r.message) facts.push(["Message", r.message]);
+  facts.push(["Identity", r.identity || "system"]);
+  if (r.ext_session_id) facts.push(["External session", r.ext_session_id]);
+
+  const cell = el("td", { colspan: "6", style: "background:var(--track);padding:14px 18px;cursor:default" }, [
+    el("div", { class: "code" }, [el("pre", { text: JSON.stringify(args, null, 2) })]),
+    el("div", { class: "kv-list", style: "grid-template-columns:1fr;margin-top:10px" },
+      facts.map(([k, v]) => el("div", { class: "kv" }, [el("span", { text: k }), el("span", { text: String(v) })]))),
+    r.run_id && el("div", { style: "margin-top:12px" }, [
+      btn("View run →", { kind: "ghost", sm: true, onClick: () => navigate("#/run/" + r.run_id) }),
+    ]),
+  ]);
+  return el("tr", { hidden: true }, [cell]);
 }
 
 // ---- utils -----------------------------------------------------------------
 function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); return n; }
 function agentLabel(identity) { return (identity || "system").split("@")[0].replace("external:", "ext:"); }
+function rawAgent(identity) { return String(identity || "").split("@")[0]; }
 function resourceLabel(r) {
   const a = safeParse(r.args_json);
   const raw = a.file_path || a.path || a.command || r.tool || "";

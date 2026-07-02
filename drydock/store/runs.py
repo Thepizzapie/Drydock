@@ -122,7 +122,8 @@ def add_audit(decision, event=None, tool=None, action=None, rule=None,
     return db.one("SELECT * FROM audit WHERE id=?", (aid,))
 
 
-def list_audit(project=None, run_id=None, decision=None, limit=200) -> list[dict]:
+def list_audit(project=None, run_id=None, decision=None, agent=None, tool=None,
+               source=None, limit=200) -> list[dict]:
     where, params = [], []
     if run_id:
         where.append("a.run_id=?")
@@ -134,6 +135,16 @@ def list_audit(project=None, run_id=None, decision=None, limit=200) -> list[dict
     if decision:
         where.append("a.decision=?")
         params.append(decision)
+    if agent:
+        where.append("a.identity LIKE ?")
+        params.append(agent + "%")
+    if tool:
+        where.append("a.tool=?")
+        params.append(tool)
+    if source == "external":
+        where.append("a.ext_session_id IS NOT NULL")
+    elif source == "native":
+        where.append("a.ext_session_id IS NULL")
     sql = "SELECT a.* FROM audit a"
     if where:
         sql += " WHERE " + " AND ".join(where)

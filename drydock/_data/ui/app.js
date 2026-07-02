@@ -7,8 +7,9 @@ import { overviewView } from "./views/overview.js";
 import { approvalsView, auditView } from "./views/approvals.js";
 import { runsView, runView } from "./views/runs.js";
 import { workView, ticketView } from "./views/work.js";
+import { repoView } from "./views/repo.js";
 import { memoryView } from "./views/memory.js";
-import { agentsView, studioView } from "./views/agents.js";
+import { agentsView } from "./views/agents.js";
 import { settingsView } from "./views/settings.js";
 
 const NAV = [
@@ -16,10 +17,10 @@ const NAV = [
   { name: "approvals", label: "Approvals", icon: ICONS.ask, badge: "asks" },
   { name: "runs", label: "Runs", icon: ICONS.runs },
   { name: "work", label: "Work", icon: ICONS.ticket },
+  { name: "repo", label: "Repo", icon: ICONS.diff },
   { name: "memory", label: "Memory", icon: ICONS.memory },
   { name: "audit", label: "Audit", icon: ICONS.audit },
   { name: "agents", label: "Agents", icon: ICONS.agents },
-  { name: "studio", label: "Studio", icon: ICONS.studio },
   { name: "settings", label: "Settings", icon: ICONS.settings },
 ];
 
@@ -45,7 +46,22 @@ function buildShell() {
   ]);
 
   const projSelect = el("select", { class: "input", style: "width:auto;padding:6px 10px;font-size:12.5px",
-    onchange: (e) => { state.project = e.target.value; render(); } });
+    onchange: async (e) => {
+      if (e.target.value === "__new__") {
+        e.target.value = state.project || "";
+        const { projectModal } = await import("./ui.js");
+        projectModal(state, { onCreated: async (p) => {
+          state.projects = await api.projects();
+          fillProjects(projSelect);
+          projSelect.value = p.slug;
+          state.project = p.slug;
+          render(); refreshBadges();
+        } });
+        return;
+      }
+      state.project = e.target.value;
+      render(); refreshBadges();
+    } });
 
   const tierBadge = el("div", { class: "tier-badge", id: "tierBadge" }, [
     el("span", { class: "ring" }), el("span", { text: "Detecting tier…" })]);
@@ -80,11 +96,11 @@ const TITLES = {
   approvals: ["Approvals", "actions waiting on your decision"],
   runs: ["Runs", "live agent sessions in sandboxes"],
   work: ["Work", "tickets and pickup-ready briefs"],
+  repo: ["Repo", "code, changes, and history"],
   memory: ["Memory", "recall, decisions, and handoffs"],
   audit: ["Audit", "every decision, recorded locally"],
-  agents: ["Agents", "the registry of who can do what"],
-  studio: ["Agent Studio", "author and version agents"],
-  settings: ["Settings", "local configuration"],
+  agents: ["Agents", "who can act, and exactly what they may do"],
+  settings: ["Settings", "local configuration and integrations"],
 };
 
 function registerViews() {
@@ -95,19 +111,27 @@ function registerViews() {
   route("run", runView);
   route("work", workView);
   route("ticket", ticketView);
+  route("repo", repoView);
   route("memory", memoryView);
   route("agents", agentsView);
-  route("studio", studioView);
+  route("studio", agentsView); // Studio merged into Agents; old links still land
   route("settings", settingsView);
 }
 
 function highlightNav(name) {
-  // sub-routes belong to a parent nav item (run → runs, ticket → work)
-  const parent = name === "run" ? "runs" : name === "ticket" ? "work" : name;
+  // sub-routes belong to a parent nav item (run → runs, ticket → work, studio → agents)
+  const parent = name === "run" ? "runs" : name === "ticket" ? "work"
+    : name === "studio" ? "agents" : name;
   document.querySelectorAll("[data-nav]").forEach((a) => a.classList.toggle("active", a.dataset.nav === parent));
   const t = TITLES[parent] || TITLES.overview;
   document.getElementById("pageTitle").textContent = t[0];
   document.getElementById("crumb").textContent = t[1];
+}
+
+function fillProjects(select) {
+  select.innerHTML = "";
+  state.projects.forEach((p) => select.append(el("option", { value: p.slug, text: p.name })));
+  select.append(el("option", { value: "__new__", text: "＋ New project…" }));
 }
 
 async function refreshBadges() {
@@ -143,11 +167,9 @@ async function boot() {
     state.projects = projects;
     if (projects.length) {
       state.project = projects[0].slug;
-      projSelect.innerHTML = "";
-      projects.forEach((p) => projSelect.append(el("option", { value: p.slug, text: p.name })));
-    } else {
-      projSelect.replaceWith(el("span", { class: "muted", text: "no project — run `drydock init`" }));
     }
+    fillProjects(projSelect);
+    if (state.project) projSelect.value = state.project;
   } catch (e) { /* server may be starting */ }
 
   loadTier(tierBadge);

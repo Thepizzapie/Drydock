@@ -48,7 +48,8 @@ class OpenAICompatProvider(Provider):
         )
 
     def cost_cents(self, tokens_in, tokens_out) -> int:
-        return 0  # local models are free
+        from .. import pricing
+        return pricing.cost_cents(self.model, tokens_in, tokens_out)  # local models → 0
 
 
 def _to_openai(messages):

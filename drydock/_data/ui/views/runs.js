@@ -91,6 +91,7 @@ function runsTable(runs) {
     el("th", { text: "Status" }),
     el("th", { text: "Runner" }),
     el("th", { text: "Tier" }),
+    el("th", { text: "Model / cost" }),
     el("th", { class: "r", text: "Tokens" }),
     el("th", { class: "r", text: "Started" }),
   ])]);
@@ -104,6 +105,7 @@ function runsTable(runs) {
     el("td", {}, [statusPill(r.status)]),
     el("td", { class: "mono", text: r.runner || "—" }),
     el("td", { text: tierLabel(r.tier) }),
+    el("td", {}, [modelCostCell(r)]),
     el("td", { class: "num", text: fmtTokens((r.tokens_in || 0) + (r.tokens_out || 0)) }),
     el("td", { class: "num", text: relTime(r.started_at) }),
   ])));
@@ -263,9 +265,10 @@ function metaCard(run, workspace, id) {
     ["Status", null, statusPill(run.status)],
     ["Runner", run.runner || "—", null],
     ["Tier", tierLabel(run.tier), null],
+    ["Model", null, el("span", { class: "mono", style: "font-size:11.5px;text-align:right;word-break:break-all", text: run.model || "—" })],
     ["Tokens in", fmtTokens(run.tokens_in), null],
     ["Tokens out", fmtTokens(run.tokens_out), null],
-    ["Cost", fmtCost(run.cost_cents), null],
+    ["Cost", null, costCell(run)],
     ["Workspace", null, el("span", { class: "mono", style: "font-size:11px;text-align:right;word-break:break-all", text: workspacePath(workspace, run) })],
     ["Started", relTime(run.started_at), null],
   ];
@@ -385,6 +388,29 @@ function workspacePath(ws, run) { return ws.path || ws.root || run.workspace_id 
 function fmtCost(cents) {
   if (cents == null) return "—";
   return "$" + (cents / 100).toFixed(2);
+}
+// Local = nothing metered: named model isn't a hosted claude-* model and no spend was recorded.
+function isLocalRun(r) {
+  return Boolean(r.model) && !String(r.model).startsWith("claude") && !(r.cost_cents > 0);
+}
+// Two-line cell for the runs table: model name, then what it cost.
+function modelCostCell(r) {
+  const line2 = r.cost_cents > 0
+    ? el("div", { class: "muted", style: "font-size:11.5px;margin-top:1px", text: fmtCost(r.cost_cents) })
+    : isLocalRun(r)
+      ? el("div", { class: "muted", style: "font-size:11.5px;margin-top:1px;display:flex;align-items:center;gap:5px" }, [pill("local", "info"), "$0.00"])
+      : el("div", { class: "muted", style: "font-size:11.5px;margin-top:1px", text: "$0.00" });
+  return el("div", {}, [
+    el("div", { class: "mono", style: "max-width:18ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap", text: r.model || "—" }),
+    line2,
+  ]);
+}
+// Cost value for the run-details card, with the local pill when nothing was metered.
+function costCell(run) {
+  if (isLocalRun(run)) {
+    return el("span", { style: "display:inline-flex;align-items:center;gap:6px" }, [pill("local", "info"), "$0.00"]);
+  }
+  return el("span", { text: fmtCost(run.cost_cents) });
 }
 function pretty(v) {
   if (v == null) return "";

@@ -29,6 +29,19 @@ def api_projects():
     return service.list_projects()
 
 
+@app.post("/api/projects")
+def api_create_project(body: dict):
+    name = (body.get("name") or "").strip()
+    if not name:
+        raise HTTPException(400, "name required")
+    root = (body.get("root_path") or "").strip() or None
+    import os
+    if root and not os.path.isdir(root):
+        raise HTTPException(400, f"path does not exist: {root}")
+    return service.create_project(name, root_path=root,
+                                  ticket_prefix=(body.get("ticket_prefix") or "").strip() or None)
+
+
 @app.get("/api/projects/{project}")
 def api_project(project: str):
     p = service.get_project(project)
@@ -70,13 +83,35 @@ def api_tickets(project: str, status: str | None = None):
     return tickets_mod.list_tickets(project, status=status)
 
 
+@app.post("/api/projects/{project}/tickets")
+def api_create_ticket(project: str, body: dict):
+    title = (body.get("title") or "").strip()
+    if not title:
+        raise HTTPException(400, "title required")
+    steps = body.get("steps") or []
+    if steps:
+        # plan-shaped create: ticket + pinned plan memory + scoped tasks (orbit flow)
+        plan = {"summary": title, "steps": steps,
+                "risks": body.get("risks") or [], "open_questions": []}
+        out = planning.create_ticket_from_plan(project, plan,
+                                               priority=int(body.get("priority", 2)))
+        if body.get("body"):
+            tickets_mod.update_ticket(project, out["ticket"]["key"], body=body["body"])
+        return out
+    t = tickets_mod.create_ticket(project, title, body=body.get("body"),
+                                  priority=int(body.get("priority", 2)))
+    return {"ticket": t, "tasks": []}
+
+
 @app.get("/api/projects/{project}/tickets/{ref}")
 def api_ticket(project: str, ref: str):
     t = tickets_mod.get_ticket(project, ref)
     if not t:
         raise HTTPException(404, "ticket not found")
     wi = service.list_work_items(project, ticket_id=t["id"])
-    return {"ticket": t, "work_items": wi}
+    scopes = planning.ticket_scope(project, t["id"])
+    readiness = planning.ticket_readiness(project, t["id"])
+    return {"ticket": t, "work_items": wi, "scopes": scopes, "readiness": readiness}
 
 
 @app.get("/api/tasks/{task_id}/brief")
@@ -175,6 +210,28 @@ def api_agent(project: str, name: str):
     return a
 
 
+@app.post("/api/projects/{project}/agents")
+def api_author_agent(project: str, body: dict):
+    """Author (create/update) an agent from a spec — the in-app agent builder."""
+    from ..runtime.authoring import author_agent
+    try:
+        return author_agent(project, body)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.get("/api/system/models")
+def api_models():
+    from ..runtime import models
+    return models.catalog()
+
+
+@app.get("/api/system/tools")
+def api_tools():
+    from ..runtime.authoring import tool_catalog
+    return tool_catalog()
+
+
 # ── approvals ──
 def _asks_with_detail(asks: list) -> list:
     out = []
@@ -199,10 +256,44 @@ def api_resolve(ask_id: str, body: dict):
     return {"ask_id": ask_id, "resolution": resolution, "signalled_live_run": signalled}
 
 
+# ── repo / code ──
+def _root(project: str) -> str:
+    p = service.get_project(project)
+    if not p or not p.get("root_path"):
+        raise HTTPException(404, "project has no repo path")
+    return p["root_path"]
+
+
+@app.get("/api/projects/{project}/repo")
+def api_repo(project: str):
+    from . import repo
+    return repo.summary(_root(project))
+
+
+@app.get("/api/projects/{project}/repo/commit/{sha}")
+def api_repo_commit(project: str, sha: str):
+    from . import repo
+    return repo.commit_detail(_root(project), sha)
+
+
+@app.get("/api/projects/{project}/files")
+def api_files(project: str, path: str = ""):
+    from . import repo
+    return repo.list_dir(_root(project), path)
+
+
+@app.get("/api/projects/{project}/file")
+def api_file(project: str, path: str):
+    from . import repo
+    return repo.read_file(_root(project), path)
+
+
 # ── audit / stats ──
 @app.get("/api/projects/{project}/audit")
-def api_audit(project: str, decision: str | None = None, limit: int = 200):
-    return runs_store.list_audit(project=project, decision=decision, limit=limit)
+def api_audit(project: str, decision: str | None = None, agent: str | None = None,
+              tool: str | None = None, source: str | None = None, limit: int = 200):
+    return runs_store.list_audit(project=project, decision=decision, agent=agent,
+                                 tool=tool, source=source, limit=limit)
 
 
 @app.get("/api/projects/{project}/stats/tokens")
@@ -223,6 +314,26 @@ def api_tokens(project: str):
 def api_tiers():
     from ..sandbox import detect
     return detect.tiers()
+
+
+@app.get("/api/system/mcp")
+def api_mcp_info():
+    return {
+        "command": "claude mcp add drydock -- drydock mcp",
+        "codex": "codex mcp add drydock -- drydock mcp",
+        "generic": {"command": "drydock", "args": ["mcp"]},
+        "note": "Exposes the full PM plane (tickets, memory, briefs, decisions) plus "
+                "dispatch_agent / list_asks / resolve_ask so external agents can drive sandboxed runs.",
+    }
+
+
+@app.post("/api/projects/{project}/hooks/install")
+def api_hooks_install(project: str):
+    from ..runtime.hooks import install
+    p = service.get_project(project)
+    if not p or not p.get("root_path"):
+        raise HTTPException(404, "project has no repo path")
+    return install(p["root_path"], p["slug"])
 
 
 @app.get("/api/system/doctor")
