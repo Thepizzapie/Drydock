@@ -9,7 +9,7 @@ export async function overviewView(root, { state }) {
 
   root.append(el("div", { class: "page-h" }, [
     el("div", {}, [
-      el("h2", { class: "t", text: "Mission Control" }),
+      el("h2", { class: "t", text: "Mission control" }),
       el("div", { class: "sub", text: "Everything your agents did — and everything waiting on you." }),
     ]),
     el("div", { class: "actions" }, [
@@ -73,26 +73,55 @@ function feedRow(d) {
   const res = el("span", { class: "res" });
   res.innerHTML = `${escapeHtml(d.action || "")} · <b>${escapeHtml(shortArg(d))}</b>` +
     (d.rule && d.decision !== "allow" ? ` <span class="muted">${escapeHtml(d.rule)}</span>` : "");
-  return el("div", { class: "row" }, [
+  const kind = d.decision === "allow" ? "ok" : d.decision === "deny" ? "deny" : "ask";
+  const rowClass = "row" + (d.decision === "ask" ? " is-ask" : d.decision === "deny" ? " is-deny" : "");
+  return el("div", { class: rowClass }, [
     el("span", { class: "time", text: clockTime(d.ts) }),
     el("span", { class: "agent", text: agentLabel(d.identity) }),
     res,
-    badge(d.decision),
+    pill(d.decision, kind),
   ]);
 }
 
 function askQueueCard(asks, state) {
-  const body = el("div", {});
+  // no pending asks → a quiet light card
   if (!asks || !asks.length) {
-    body.append(empty({ title: "Nothing to approve", text: "Agents are running within policy." }));
-  } else {
-    asks.slice(0, 4).forEach((a) => body.append(askItem(a, state)));
+    return card({
+      title: "Ask queue", meta: "clear",
+      body: [empty({ title: "Nothing to approve", text: "Agents are running within policy." })],
+      flush: true,
+    });
   }
-  return card({
-    title: "Ask queue", meta: asks && asks.length ? `${asks.length} pending` : "clear",
-    link: asks && asks.length ? { text: "All →" } : null, onLink: () => navigate("#/approvals"),
-    body: [body], flush: true,
-  });
+  // the focal ask is the dark glass "WAITING ON YOU" card (the signature)
+  const stack = el("div", { class: "stack" });
+  stack.append(glassAsk(asks[0]));
+  if (asks.length > 1) {
+    const rest = el("div", {});
+    asks.slice(1, 4).forEach((a) => rest.append(askItem(a, state)));
+    stack.append(card({
+      title: "Also waiting", meta: `${asks.length - 1} more`,
+      link: { text: "All →" }, onLink: () => navigate("#/approvals"),
+      body: [rest], flush: true,
+    }));
+  }
+  return stack;
+}
+
+function glassAsk(a) {
+  const d = a.detail || {};
+  const args = safeParse(d.args_json);
+  const cmd = args.command || args.file_path || args.path || d.tool || "this action";
+  const node = el("div", { class: "glass" }, [
+    el("div", { class: "k", text: "WAITING ON YOU" }),
+    el("h3", { text: `${agentLabel(d.identity)} wants to ${(d.action || "run").toLowerCase()}` }),
+    el("div", { class: "sub", text: d.message || "This action paused for your decision." }),
+    el("div", { class: "cmdbox", text: String(cmd).slice(0, 120) }),
+    el("div", { class: "acts" }, [
+      btn("Deny", { kind: "ghost", onClick: () => resolve(a.id, "denied", node) }),
+      btn("Approve once", { kind: "accent", onClick: () => resolve(a.id, "approved_once", node) }),
+    ]),
+  ]);
+  return node;
 }
 
 function askItem(a, state) {

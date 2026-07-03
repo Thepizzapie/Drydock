@@ -49,7 +49,7 @@
   --sans: "Inter", "Inter var", -apple-system, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   --mono: "Cascadia Code", "Cascadia Mono", ui-monospace, "SF Mono", Consolas, monospace;
 
-  --rail-w: 214px;
+  --rail-w: 66px;
 }
 
 * { box-sizing: border-box; }
@@ -72,75 +72,73 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
 /* ---- app frame ------------------------------------------------------------ */
 .app { display: grid; grid-template-columns: var(--rail-w) 1fr; min-height: 100vh; }
 
-/* ---- rail ----------------------------------------------------------------- */
+/* ---- rail (orbit: dark navy, icon-only) ----------------------------------- */
 .rail {
-  background: var(--surface);
-  border-right: 1px solid var(--line);
-  display: flex; flex-direction: column;
-  padding: 18px 14px;
+  background: var(--navy);
+  display: flex; flex-direction: column; align-items: center;
+  padding: 14px 0; gap: 5px;
   position: sticky; top: 0; height: 100vh;
 }
-.rail .brand { display: flex; align-items: center; padding: 2px 4px 18px; }
-.rail .brand .logo-full { width: 100%; max-width: 168px; height: auto; object-fit: contain; }
-.rail .brand .logo-mark { display: none; width: 40px; height: 40px; object-fit: contain; }
-.nav { display: flex; flex-direction: column; gap: 2px; }
+.rail .brand { margin-bottom: 12px; }
+.rail .brand .logo-full { display: none; }
+.rail .brand .logo-mark {
+  display: block; width: 40px; height: 40px; object-fit: contain;
+  background: #fff; border-radius: 12px; padding: 5px;
+}
+.nav { display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .nav a {
-  display: flex; align-items: center; gap: 11px;
-  padding: 9px 11px; border-radius: 10px;
-  color: var(--ink-2); font-weight: 500; font-size: 13.5px;
+  position: relative; width: 42px; height: 42px; border-radius: 12px;
+  display: grid; place-items: center; color: #8593AC;
   transition: background .12s, color .12s;
 }
-.nav a .ic { width: 18px; height: 18px; flex: none; color: var(--ink-3); }
-.nav a:hover { background: var(--line-2); color: var(--ink); }
-.nav a:hover .ic { color: var(--steel-blue); }
-.nav a.active { background: rgba(11,29,51,.055); color: var(--navy); font-weight: 600; }
+.nav a span:not(.ic):not(.count) { display: none; }   /* icon-only rail */
+.nav a .ic { width: 20px; height: 20px; }
+.nav a:hover { background: rgba(255,255,255,.07); color: #D3DBEA; }
+.nav a.active { background: #fff; color: var(--navy); }
 .nav a.active .ic { color: var(--navy); }
-.nav a .count {
-  margin-left: auto; font-size: 11px; font-weight: 700;
-  background: var(--ask-bg); color: var(--orange-ink);
-  padding: 1px 7px; border-radius: var(--r-pill);
+.nav a .count {                                        /* orange attention dot */
+  position: absolute; top: 7px; right: 7px;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--orange); font-size: 0; padding: 0;
+  box-shadow: 0 0 0 2px var(--navy);
 }
 .rail .spacer { flex: 1; }
-.rail .local {
-  display: flex; align-items: center; gap: 8px;
-  padding: 10px 11px; border-top: 1px solid var(--line);
-  font-size: 12px; color: var(--ink-3);
+.rail .railbtn {
+  width: 42px; height: 42px; border-radius: 12px;
+  display: grid; place-items: center; color: #8593AC;
 }
+.rail .railbtn:hover { background: rgba(255,255,255,.07); color: #D3DBEA; }
+.rail .railbtn .ic { width: 20px; height: 20px; }
 
-/* ---- main + topbar -------------------------------------------------------- */
+/* ---- main + topbar (project chip + status) -------------------------------- */
 .main { display: flex; flex-direction: column; min-width: 0; }
 .topbar {
-  position: sticky; top: 0; z-index: 20;
   display: flex; align-items: center; gap: 14px;
-  padding: 13px 28px;
-  background: rgba(237,241,245,.82);
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid var(--line);
+  padding: 16px 32px 4px;
+  background: transparent;
 }
-.topbar h1 { font-size: 15px; font-weight: 650; margin: 0; letter-spacing: -.01em; }
-.topbar .crumb { color: var(--ink-3); font-weight: 500; }
-.topbar .right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
-.status {
-  display: flex; align-items: center; gap: 7px;
-  font-size: 12px; color: var(--ink-2); font-weight: 500;
-}
-.status .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px var(--ok-bg); }
-
-.tier-badge {
+.projchip {
   display: inline-flex; align-items: center; gap: 8px;
-  border: 1px solid var(--mist-gray); background: var(--surface);
-  border-radius: var(--r-pill); padding: 5px 12px 5px 10px;
-  font-size: 12px; font-weight: 650; color: var(--navy);
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r-pill); padding: 6px 8px 6px 13px;
+  box-shadow: var(--shadow-card);
 }
-.tier-badge .ring {
-  width: 15px; height: 15px; border-radius: 50%;
-  background: conic-gradient(var(--ok) 0 var(--p,100%), var(--track) 0);
-  position: relative;
+.projchip .ic { width: 15px; height: 15px; color: var(--steel-blue); }
+.projchip select {
+  border: none; background: none; font: inherit; font-size: 13.5px;
+  font-weight: 650; color: var(--navy); cursor: pointer; padding: 0 2px;
 }
-.tier-badge .ring::after { content:""; position: absolute; inset: 3.5px; border-radius: 50%; background: var(--surface); }
+.projchip select:focus { outline: none; }
+.topbar .right { margin-left: auto; }
+.statusline {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12.5px; color: var(--ink-3); font-weight: 500;
+}
+.statusline .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px var(--ok-bg); }
+.statusline b { color: var(--ink-2); font-weight: 600; }
 
-.canvas { padding: 24px 28px 40px; }
-.canvas.wide { max-width: 1360px; }
+.canvas { padding: 14px 32px 44px; }
+.canvas.wide { max-width: 1320px; }
 
 /* ---- page head ------------------------------------------------------------ */
 .page-h { display: flex; align-items: flex-end; gap: 16px; margin-bottom: 18px; }
@@ -159,10 +157,6 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
 @media (max-width: 1100px) {
   .g-3, .g-4, .g-main, .g-main-3 { grid-template-columns: 1fr; }
   .g-2 { grid-template-columns: 1fr; }
-  :root { --rail-w: 64px; }
-  .rail .brand .logo-full { display: none; }
-  .rail .brand .logo-mark { display: block; }
-  .nav a span, .rail .local span { display: none; }
 }
 
 /* ---- card ----------------------------------------------------------------- */
@@ -189,11 +183,14 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
 
 /* ---- stat ----------------------------------------------------------------- */
-.stat { padding: 15px 17px; }
-.stat .lbl { font-size: 12px; color: var(--ink-2); display: flex; align-items: center; gap: 7px; }
-.stat .num { font-size: 27px; font-weight: 750; letter-spacing: -.02em; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.stat { padding: 16px 18px; }
+.stat .lbl { font-size: 12.5px; color: var(--ink-2); display: flex; align-items: center; gap: 7px; }
+.stat .num { font-size: 30px; font-weight: 750; letter-spacing: -.02em; margin-top: 6px; font-variant-numeric: tabular-nums; }
 .stat .num.attn { color: var(--orange); }
-.stat .cap { font-size: 11.5px; color: var(--ink-3); margin-top: 1px; }
+.stat .cap { font-size: 11.5px; color: var(--ink-3); margin-top: 3px; }
+/* orbit: the "waiting on you" KPI wears the accent */
+.card.stat.attn { border-color: #F4CBA6; }
+.card.stat.attn .lbl, .card.stat.attn .cap { color: var(--orange-ink); }
 
 /* ---- pills / badges ------------------------------------------------------- */
 .pill { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 650; border-radius: var(--r-pill); padding: 3px 9px; letter-spacing: .01em; white-space: nowrap; }
@@ -243,6 +240,10 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
 .feed .row { display: grid; grid-template-columns: 62px 96px 1fr auto; gap: 12px; align-items: center; padding: 9px 18px; border-bottom: 1px solid var(--line-2); }
 .feed .row:last-child { border-bottom: none; }
 .feed .row:hover { background: var(--line-2); }
+.feed .row.is-ask { background: var(--ask-bg); }
+.feed .row.is-ask:hover { background: #FDE8D6; }
+.feed .row.is-ask .time { color: var(--orange-ink); }
+.feed .row.is-deny .time { color: var(--deny); }
 .feed .time { font-family: var(--mono); font-size: 11px; color: var(--ink-3); }
 .feed .agent { font-family: var(--mono); font-size: 12px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .feed .res { font-family: var(--mono); font-size: 12px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -272,6 +273,12 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
 .glass .kv { display: flex; justify-content: space-between; font-size: 12px; padding: 7px 0; border-top: 1px solid rgba(255,255,255,.1); }
 .glass .kv span:first-child { color: rgba(255,255,255,.5); }
 .glass .kv span:last-child { font-family: var(--mono); font-size: 11.5px; }
+.glass .cmdbox {
+  margin-top: 13px; background: rgba(0,0,0,.26);
+  border: 1px solid rgba(255,255,255,.09); border-radius: 10px;
+  padding: 10px 13px; font-family: var(--mono); font-size: 12px;
+  color: #D6DEEC; overflow-x: auto; white-space: nowrap;
+}
 .glass .acts { display: flex; gap: 8px; margin-top: 14px; }
 .glass .acts .btn.ghost { background: transparent; color: #fff; border-color: rgba(255,255,255,.28); }
 .glass .acts .btn.ghost:hover { background: rgba(255,255,255,.1); }

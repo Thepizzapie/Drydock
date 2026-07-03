@@ -32,20 +32,18 @@ function buildShell() {
       n.badge && el("span", { class: "count", dataset: { badge: n.badge }, style: "display:none" }),
     ]));
 
+  const themeBtn = el("button", { class: "railbtn", "aria-label": "Settings",
+    onclick: () => navigate("#/settings") }, [el("span", { class: "ic", html: ICONS.settings })]);
+
   const rail = el("aside", { class: "rail" }, [
-    el("div", { class: "brand" }, [
-      el("img", { src: "./assets/logo-horizontal.png", alt: "Drydock", class: "logo-full" }),
-      el("img", { src: "./assets/mark.png", alt: "Drydock", class: "logo-mark" }),
-    ]),
+    el("a", { class: "brand", href: "#/overview", "aria-label": "Drydock" },
+      [el("img", { src: "./assets/mark.png", alt: "Drydock", class: "logo-mark" })]),
     el("nav", { class: "nav" }, navLinks),
     el("div", { class: "spacer" }),
-    el("div", { class: "local" }, [
-      el("span", { class: "status", html: '<span class="dot"></span>' }),
-      el("span", { text: "All systems local" }),
-    ]),
+    themeBtn,
   ]);
 
-  const projSelect = el("select", { class: "input", style: "width:auto;padding:6px 10px;font-size:12.5px",
+  const projSelect = el("select", { "aria-label": "Project",
     onchange: async (e) => {
       if (e.target.value === "__new__") {
         e.target.value = state.project || "";
@@ -63,32 +61,27 @@ function buildShell() {
       render(); refreshBadges();
     } });
 
-  const tierBadge = el("div", { class: "tier-badge", id: "tierBadge" }, [
-    el("span", { class: "ring" }), el("span", { text: "Detecting tier…" })]);
+  const projChip = el("div", { class: "projchip" }, [
+    el("span", { class: "ic", html: ICONS.diff }), projSelect,
+  ]);
+
+  const statusLine = el("div", { class: "statusline", id: "statusLine" }, [
+    el("span", { class: "dot" }),
+    el("span", { html: "local · <b>detecting tier…</b>" }),
+  ]);
 
   const topbar = el("header", { class: "topbar" }, [
-    el("h1", { id: "pageTitle", text: "Mission Control" }),
-    el("span", { class: "crumb", id: "crumb" }),
-    el("div", { class: "right" }, [
-      projSelect,
-      tierBadge,
-      el("div", { class: "status" }, [el("span", { class: "dot" }), el("span", { text: "Local · this machine" })]),
-      el("span", { class: "ic", html: ICONS.windows, style: "width:18px;color:var(--steel-blue)" }),
-    ]),
+    projChip,
+    el("div", { class: "right" }, [statusLine]),
   ]);
 
   const main = el("main", { class: "main" }, [
     topbar,
     el("div", { class: "canvas wide", id: "view" }),
-    el("footer", { class: "foot" }, [
-      el("span", { text: "Drydock v0.1" }), el("span", { class: "sep", text: "·" }),
-      el("span", { text: "Open source · Apache-2.0" }), el("span", { class: "sep", text: "·" }),
-      el("span", { text: "Runs locally on your hardware" }),
-    ]),
   ]);
 
   document.getElementById("app").append(rail, main);
-  return { projSelect, tierBadge };
+  return { projSelect, statusLine };
 }
 
 const TITLES = {
@@ -123,9 +116,6 @@ function highlightNav(name) {
   const parent = name === "run" ? "runs" : name === "ticket" ? "work"
     : name === "studio" ? "agents" : name;
   document.querySelectorAll("[data-nav]").forEach((a) => a.classList.toggle("active", a.dataset.nav === parent));
-  const t = TITLES[parent] || TITLES.overview;
-  document.getElementById("pageTitle").textContent = t[0];
-  document.getElementById("crumb").textContent = t[1];
 }
 
 function fillProjects(select) {
@@ -145,20 +135,17 @@ async function refreshBadges() {
   } catch (_) {}
 }
 
-async function loadTier(badge) {
+async function loadTier(statusLine) {
+  const label = { 0: "tier 0 · policy-only", 1: "tier 1 · WSL2", 2: "tier 2 · Docker" };
   try {
     const t = await api.tiers();
     state.tiers = t;
-    const rec = t.recommended;
-    const label = { 0: "Tier 0 · policy-only", 1: "Tier 1 · WSL2", 2: "Tier 2 · Docker" }[rec];
-    const pct = { 0: 34, 1: 78, 2: 100 }[rec];
-    badge.querySelector(".ring").style.setProperty("--p", pct + "%");
-    badge.lastChild.textContent = label;
-  } catch (_) { badge.lastChild.textContent = "Tier 0"; }
+    statusLine.querySelector("span:last-child").innerHTML = `local · <b>${label[t.recommended] || "tier 0"}</b>`;
+  } catch (_) { statusLine.querySelector("span:last-child").innerHTML = "local · <b>tier 0</b>"; }
 }
 
 async function boot() {
-  const { projSelect, tierBadge } = buildShell();
+  const { projSelect, statusLine } = buildShell();
   registerViews();
   onRouteChange(highlightNav);
 
@@ -172,7 +159,7 @@ async function boot() {
     if (state.project) projSelect.value = state.project;
   } catch (e) { /* server may be starting */ }
 
-  loadTier(tierBadge);
+  loadTier(statusLine);
   await render();
   refreshBadges();
   setInterval(refreshBadges, 8000);
