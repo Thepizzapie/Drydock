@@ -32,15 +32,12 @@ function buildShell() {
       n.badge && el("span", { class: "count", dataset: { badge: n.badge }, style: "display:none" }),
     ]));
 
-  const themeBtn = el("button", { class: "railbtn", "aria-label": "Settings",
-    onclick: () => navigate("#/settings") }, [el("span", { class: "ic", html: ICONS.settings })]);
-
   const rail = el("aside", { class: "rail" }, [
     el("a", { class: "brand", href: "#/overview", "aria-label": "Drydock" },
       [el("img", { src: "./assets/mark.png", alt: "Drydock", class: "logo-mark" })]),
     el("nav", { class: "nav" }, navLinks),
     el("div", { class: "spacer" }),
-    themeBtn,
+    el("span", { class: "pulse", title: "All systems local" }, [el("i")]),
   ]);
 
   const projSelect = el("select", { "aria-label": "Project",

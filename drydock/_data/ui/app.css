@@ -6,50 +6,53 @@
    ============================================================================ */
 
 :root {
-  /* brand */
-  --navy:      #0B1D33;
+  /* brand — Orbit v2: navy structure, forest-green live/positive, orange action */
+  --navy:      #0B1D33;   /* headings, rail */
   --navy-2:    #17293F;
-  --orange:    #FF6A00;
+  --orange:    #FF6A00;   /* primary action + attention/ask */
   --orange-ink:#B85307;
-  --steel-blue:#3E4A59;
-  --steel:     #8B97A6;
+  --accent:    #2D6A4F;   /* forest green — live / positive / links / status */
+  --accent-ink:#1B4332;
+  --accent-tint:#EDF3F0;
+  --steel-blue:#2D6A4F;   /* links resolve to green now */
+  --steel:     #8C97A1;
   --mist-gray: #D8DFE6;
   --mist:      #F1F4F7;
   --surface:   #FFFFFF;
-  --canvas:    #EDF1F5;
+  --canvas:    #FAFBFC;
 
   /* text */
-  --ink:   #0B1D33;
-  --ink-2: #46535F;
-  --ink-3: #8B97A6;
+  --ink:   #16232F;       /* body text */
+  --ink-2: #66727D;       /* muted / secondary */
+  --ink-3: #8C97A1;       /* faint / captions */
 
   /* lines */
-  --line:  #E4E9EF;
-  --line-2:#EEF2F6;
-  --track: #F1F4F7;
+  --line:  #EAEDF0;
+  --line-2:#F0F2F4;
+  --track: #F2F2F2;
 
-  /* semantic (separate from the orange accent) */
-  --ok:      #2E7D53;  --ok-bg:   #E8F2EC;
+  /* semantic */
+  --ok:      #2D6A4F;  --ok-bg:   #E7F2EC;
   --deny:    #D6453F;  --deny-bg: #FBEBEA;
-  --ask:     #FF6A00;  --ask-bg:  #FFF1E7;
-  --info:    #3E5C8A;  --info-bg: #EAF0F8;
+  --ask:     #B85307;  --ask-bg:  #FFE8D6;
+  --info:    #2D6A4F;  --info-bg: #E7F2EC;
 
   /* shape */
-  --r-card: 14px;
-  --r-chip: 8px;
-  --r-input:10px;
-  --r-pill: 999px;
+  --r-card: 18px;
+  --r-chip: 10px;
+  --r-input:12px;
+  --r-pill: 9999px;
 
   /* elevation */
-  --shadow-card: 0 1px 2px rgba(11,29,51,.04), 0 8px 24px rgba(11,29,51,.055);
+  --shadow-card: 0 1px 2px rgba(11,29,51,.04), 0 10px 28px rgba(11,29,51,.05);
   --shadow-pop:  0 12px 34px rgba(11,29,51,.14);
-  --shadow-glass:0 16px 40px rgba(11,29,51,.28);
+  --shadow-glass:0 18px 44px rgba(11,29,51,.35);
 
-  /* type */
-  --sans: "Inter", "Inter var", -apple-system, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
-  --mono: "Cascadia Code", "Cascadia Mono", ui-monospace, "SF Mono", Consolas, monospace;
+  /* type — Geist (Orbit) first, then the local fallback (no webfont fetch) */
+  --sans: "Geist", "Inter", "Inter var", -apple-system, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --mono: "Geist Mono", "Cascadia Code", "Cascadia Mono", ui-monospace, "SF Mono", Consolas, monospace;
 
-  --rail-w: 66px;
+  --rail-w: 64px;
 }
 
 * { box-sizing: border-box; }
@@ -69,26 +72,28 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
 ::selection { background: rgba(255,106,0,.16); }
 
-/* ---- app frame ------------------------------------------------------------ */
-.app { display: grid; grid-template-columns: var(--rail-w) 1fr; min-height: 100vh; }
+/* ---- app frame (orbit v2: floating panels, 10px gutter) ------------------- */
+.app { display: flex; min-height: 100vh; padding: 10px; gap: 10px; background: var(--canvas); }
 
-/* ---- rail (orbit: dark navy, icon-only) ----------------------------------- */
+/* ---- rail (orbit v2: floating rounded navy card, icon-only) --------------- */
 .rail {
   background: var(--navy);
+  border-radius: 20px;
   display: flex; flex-direction: column; align-items: center;
-  padding: 14px 0; gap: 5px;
-  position: sticky; top: 0; height: 100vh;
+  padding: 16px 10px; gap: 6px;
+  position: sticky; top: 10px; height: calc(100vh - 20px);
+  width: var(--rail-w); flex-shrink: 0;
 }
 .rail .brand { margin-bottom: 12px; }
 .rail .brand .logo-full { display: none; }
 .rail .brand .logo-mark {
-  display: block; width: 40px; height: 40px; object-fit: contain;
-  background: #fff; border-radius: 12px; padding: 5px;
+  display: block; width: 36px; height: 36px; object-fit: contain;
+  background: #fff; border-radius: 10px; padding: 5px;
 }
-.nav { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.nav { display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .nav a {
-  position: relative; width: 42px; height: 42px; border-radius: 12px;
-  display: grid; place-items: center; color: #8593AC;
+  position: relative; width: 40px; height: 40px; border-radius: 14px;
+  display: grid; place-items: center; color: rgba(255,255,255,.55);
   transition: background .12s, color .12s;
 }
 .nav a span:not(.ic):not(.count) { display: none; }   /* icon-only rail */
@@ -103,27 +108,30 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
   box-shadow: 0 0 0 2px var(--navy);
 }
 .rail .spacer { flex: 1; }
-.rail .railbtn {
-  width: 42px; height: 42px; border-radius: 12px;
-  display: grid; place-items: center; color: #8593AC;
-}
-.rail .railbtn:hover { background: rgba(255,255,255,.07); color: #D3DBEA; }
-.rail .railbtn .ic { width: 20px; height: 20px; }
+.rail .pulse { width: 40px; height: 40px; border-radius: 14px; display: grid; place-items: center; flex-shrink: 0; }
+.rail .pulse i { width: 8px; height: 8px; border-radius: 50%; background: #3DDC97; animation: pulse 2.4s ease-in-out infinite; }
 
 /* ---- main + topbar (project chip + status) -------------------------------- */
-.main { display: flex; flex-direction: column; min-width: 0; }
+.main { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .topbar {
-  display: flex; align-items: center; gap: 14px;
-  padding: 16px 32px 4px;
-  background: transparent;
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 24px;
+  background: var(--canvas);
+  border-bottom: 1px solid var(--line);
+  position: sticky; top: 0; z-index: 20;
 }
 .projchip {
-  display: inline-flex; align-items: center; gap: 8px;
+  display: inline-flex; align-items: center; gap: 10px;
   background: var(--surface); border: 1px solid var(--line);
-  border-radius: var(--r-pill); padding: 6px 8px 6px 13px;
-  box-shadow: var(--shadow-card);
+  border-radius: 12px; padding: 7px 12px 7px 8px;
+  box-shadow: 0 1px 2px rgba(11,29,51,.04);
 }
-.projchip .ic { width: 15px; height: 15px; color: var(--steel-blue); }
+.projchip .ic {
+  width: 26px; height: 26px; border-radius: 8px; flex-shrink: 0;
+  display: grid; place-items: center;
+  background: var(--accent-tint); color: var(--accent);
+}
+.projchip .ic svg { width: 15px; height: 15px; }
 .projchip select {
   border: none; background: none; font: inherit; font-size: 13.5px;
   font-weight: 650; color: var(--navy); cursor: pointer; padding: 0 2px;
@@ -137,7 +145,7 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
 .statusline .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px var(--ok-bg); }
 .statusline b { color: var(--ink-2); font-weight: 600; }
 
-.canvas { padding: 14px 32px 44px; }
+.canvas { padding: 22px 24px 40px; }
 .canvas.wide { max-width: 1320px; }
 
 /* ---- page head ------------------------------------------------------------ */
@@ -261,9 +269,10 @@ button { font: inherit; cursor: pointer; border: none; background: none; color: 
 
 /* glass hero-ask (single-focus approval, e.g. modal or overview lead) */
 .glass {
-  border-radius: var(--r-card); color: #fff; padding: 20px;
-  background: linear-gradient(150deg, var(--navy-2), var(--navy));
-  box-shadow: var(--shadow-glass);
+  border-radius: var(--r-card); color: #fff; padding: 22px;
+  background: linear-gradient(160deg, rgba(23,41,63,.94), rgba(11,29,51,.92));
+  border: 1px solid rgba(255,255,255,.08);
+  box-shadow: 0 18px 44px rgba(11,29,51,.35), 0 0 0 6px rgba(255,106,0,.06);
   position: relative; overflow: hidden;
 }
 .glass::before { content:""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(255,255,255,.08), transparent 30%); pointer-events: none; }
